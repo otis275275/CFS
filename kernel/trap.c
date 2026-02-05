@@ -77,8 +77,10 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2) {
+    if(p) p->vruntime++;
     yield();
+  }
 
   usertrapret();
 }
@@ -151,8 +153,79 @@ kerneltrap()
   }
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
-    yield();
+  if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING) {
+     struct proc *p = myproc();
+     // CFS vruntime update
+     // nice -20 (high prio) -> decay/delta 1
+     // nice 0 -> delta 10
+     // nice 19 (low prio) -> delta 100?
+     
+     // Let's use formula: delta = 10 * (1 + (nice + 20) / 40) ? No.
+     // Let's map roughly:
+     // -20 -> inc = 3
+     // -10 -> inc = 7
+     // 0   -> inc = 10
+     // 10  -> inc = 15
+     // 19  -> inc = 25
+     
+     // Simple linear: delta = 10 + (p->nice / 2)
+     // if nice=-20 -> 0. Bad.
+     // delta = 10 + p->nice. 
+     // if nice=-10 -> 0.
+     // Let's ensure minimal growth.
+     
+     // Mapping standard nice to weights roughly:
+     // -20: weight 88761
+     // 0:   weight 1024
+     // 19:  weight 15
+     
+     // vruntime += 1024 / weight * period.
+     // This means higher weight -> smaller vruntime increase.
+     
+     // Simplified Calculation for xv6:
+     // nice [-20, 19]
+     // delta = 10 * (nice + 25) / 25
+     // -20 -> 10 * 5 / 25 = 2
+     // 0 -> 10 * 25 / 25 = 10
+     // 20 -> 10 * 45 / 25 = 18
+     
+     // Let's try to exaggerate a bit more for visibility.
+     // delta = 10 + p->nice
+     // Adjust nice base so it's always positive?
+     // Let's assume input nice is checked.
+     
+     // Let's use:
+     // delta = 10;
+     // if (p->nice > 0) delta = 10 + p->nice;       // (0..19) -> 10..29 (higher nice, faster decay)
+     // if (p->nice < 0) delta = 100 / (10 - p->nice); // integer division hack?
+     // No let's be simpler.
+     
+     // delta = base_delta * weight_0 / weight_p
+     /*
+        Generic simplified scheduler weights
+        nice -20: 3
+        nice -10: 7
+        nice 0:   10
+        nice 10:  25
+        nice 19:  50
+     */
+     
+     int delta = 10;
+     if (p->nice == 0) delta = 10;
+     else if (p->nice < 0) { // High priority
+         // -20..-1 map to 1..9
+         // delta = 10 + (p->nice * 9 / 20) ?
+         // approx:
+         delta = 10 + (p->nice / 2); // e.g. -10 -> 5. -20 -> 0 (prevent 0)
+         if (delta < 1) delta = 1;
+     } else { // Low priority
+         // 1..19 map to 11..~30
+         delta = 10 + p->nice;
+     }
+     
+     p->vruntime += delta;
+     yield();
+  }
 
   // the yield() may have caused some traps to occur,
   // so restore trap registers for use by kernelvec.S's sepc instruction.

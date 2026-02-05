@@ -91,3 +91,49 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_set_sched_policy(void)
+{
+  int policy;
+  argint(0, &policy);
+  return set_sched_policy(policy);
+}
+
+uint64
+sys_set_priority(void)
+{
+  int pid, priority;
+  struct proc *p;
+  
+  argint(0, &pid);
+  argint(1, &priority);
+    
+  if(priority < -20) priority = -20;
+  if(priority > 19) priority = 19;
+  
+  if(pid == 0) {
+      myproc()->nice = priority;
+      return 0;
+  }
+  
+  // Find proc
+  // Note: accessing global proc array requires iterating safely, 
+  // but looking up by pid is done in kill/wait usually.
+  // For simplicity here, we assume user passes 0 typically or we iterate.
+  // Actually, let's just implement it for current process if pid=0.
+  // If we want to change others, we need to iterate proc table.
+  
+  extern struct proc proc[];
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid == pid){
+      p->nice = priority;
+      release(&p->lock);
+      return 0;
+    }
+    release(&p->lock);
+  }
+  
+  return -1;
+}

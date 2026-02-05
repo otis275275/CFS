@@ -52,6 +52,8 @@ struct {
   uint e;  // Edit index
 } cons;
 
+struct spinlock cons_out_lock;
+
 //
 // user write()s to the console go here.
 //
@@ -60,12 +62,14 @@ consolewrite(int user_src, uint64 src, int n)
 {
   int i;
 
+  acquire(&cons_out_lock);
   for(i = 0; i < n; i++){
     char c;
     if(either_copyin(&c, user_src, src+i, 1) == -1)
       break;
     uartputc(c);
   }
+  release(&cons_out_lock);
 
   return i;
 }
@@ -182,6 +186,7 @@ void
 consoleinit(void)
 {
   initlock(&cons.lock, "cons");
+  initlock(&cons_out_lock, "cons_out");
 
   uartinit();
 

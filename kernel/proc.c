@@ -15,6 +15,8 @@ struct proc *initproc;
 int nextpid = 1;
 struct spinlock pid_lock;
 
+int sched_policy = 0; // 0 for RR, 1 for CFS
+
 extern void forkret(void);
 static void freeproc(struct proc *p);
 
@@ -102,6 +104,14 @@ allocpid()
   return pid;
 }
 
+int
+set_sched_policy(int policy)
+{
+  if(policy != 0 && policy != 1) return -1;
+  sched_policy = policy;
+  return 0;
+}
+
 // Look in the process table for an UNUSED proc.
 // If found, initialize state required to run in the kernel,
 // and return with p->lock held.
@@ -124,6 +134,8 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->vruntime = 0;
+  p->nice = 0;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -441,6 +453,7 @@ wait(uint64 addr)
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
+
 void
 scheduler(void)
 {
@@ -454,21 +467,72 @@ scheduler(void)
     // processes are waiting.
     intr_on();
 
-    for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+    if(sched_policy == 0) {
+      // Round Robin
+      for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if(p->state == RUNNABLE) {
+          // Switch to chosen process.  It is the process's job
+          // to release its lock and then reacquire it
+          // before jumping back to us.
+          p->state = RUNNING;
+          c->proc = p;
+          
+          if(p->pid > 2) {
+              // viz_sched manual inline
+              int col = (p->pid - 3) % 4; 
+              int width = 20;
+              for(int c=0; c<col; c++) {
+               for(int s=0; s<width; s++) printf(" ");
+               printf("|"); 
+              }
+              printf(" [RR PID:%d] \n", p->pid);
+          }
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
+          swtch(&c->context, &p->context);
+
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+          c->proc = 0;
+        }
+        release(&p->lock);
       }
-      release(&p->lock);
+    } else {
+      // CFS: Choose process with lowest vruntime
+      struct proc *best_p = 0;
+      
+      for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if(p->state == RUNNABLE) {
+          if(best_p == 0 || p->vruntime < best_p->vruntime) {
+            if(best_p) release(&best_p->lock);
+            best_p = p;
+            continue; // Keep lock held on best_p
+          }
+        }
+        release(&p->lock);
+      }
+
+      if(best_p) {
+        best_p->state = RUNNING;
+        c->proc = best_p;
+        
+        // Optional: diagnostics
+        if(best_p->pid > 2) {
+             // viz_sched manual inline
+              int col = (best_p->pid - 3) % 4; 
+              int width = 20;
+              for(int c=0; c<col; c++) {
+               for(int s=0; s<width; s++) printf(" ");
+               printf("|"); 
+              }
+              printf(" [CFS PID:%d vr:%d nice:%d] \n", best_p->pid, (int)best_p->vruntime, best_p->nice);
+        }
+
+        swtch(&c->context, &best_p->context);
+        c->proc = 0;
+        release(&best_p->lock);
+      }
     }
   }
 }
