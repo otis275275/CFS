@@ -137,3 +137,13 @@ sys_set_priority(void)
   
   return -1;
 }
+
+extern int enable_sched_output(int);
+
+uint64
+sys_enable_sched_output(void)
+{
+  int enable;
+  argint(0, &enable);
+  return enable_sched_output(enable);
+}

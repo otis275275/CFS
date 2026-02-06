@@ -78,7 +78,21 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2) {
-    if(p) p->vruntime++;
+    if(p) {
+      // CFS: vruntime increases based on nice value
+      // nice=-20 (high prio) -> delta small -> runs more
+      // nice=+19 (low prio) -> delta large -> runs less
+      int delta = 10;
+      if(p->nice < 0) {
+        // High priority: delta = 10 + nice/2 (e.g., nice=-10 -> delta=5)
+        delta = 10 + (p->nice / 2);
+        if(delta < 1) delta = 1;
+      } else if(p->nice > 0) {
+        // Low priority: delta = 10 + nice (e.g., nice=+10 -> delta=20)
+        delta = 10 + p->nice;
+      }
+      p->vruntime += delta;
+    }
     yield();
   }
 

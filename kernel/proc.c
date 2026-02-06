@@ -16,9 +16,17 @@ int nextpid = 1;
 struct spinlock pid_lock;
 
 int sched_policy = 0; // 0 for RR, 1 for CFS
+int sched_output_enabled = 0; // 0 = no output, 1 = output enabled
 
 extern void forkret(void);
 static void freeproc(struct proc *p);
+
+int
+enable_sched_output(int enable)
+{
+  sched_output_enabled = enable;
+  return 0;
+}
 
 extern char trampoline[]; // trampoline.S
 
@@ -478,15 +486,8 @@ scheduler(void)
           p->state = RUNNING;
           c->proc = p;
           
-          if(p->pid > 2) {
-              // viz_sched manual inline
-              int col = (p->pid - 3) % 4; 
-              int width = 20;
-              for(int c=0; c<col; c++) {
-               for(int s=0; s<width; s++) printf(" ");
-               printf("|"); 
-              }
-              printf(" [RR PID:%d] \n", p->pid);
+          if(sched_output_enabled && p->pid > 3 && p->nice != -20) {
+              printf("[RR] PID=%d\n", p->pid);
           }
 
           swtch(&c->context, &p->context);
@@ -517,16 +518,10 @@ scheduler(void)
         best_p->state = RUNNING;
         c->proc = best_p;
         
-        // Optional: diagnostics
-        if(best_p->pid > 2) {
-             // viz_sched manual inline
-              int col = (best_p->pid - 3) % 4; 
-              int width = 20;
-              for(int c=0; c<col; c++) {
-               for(int s=0; s<width; s++) printf(" ");
-               printf("|"); 
-              }
-              printf(" [CFS PID:%d vr:%d nice:%d] \n", best_p->pid, (int)best_p->vruntime, best_p->nice);
+        // Improved diagnostics for CFS
+        if(sched_output_enabled && best_p->pid > 3 && best_p->nice != -20) {
+              printf("[CFS] PID=%d vr=%d nice=%d\n", 
+                     best_p->pid, (int)best_p->vruntime, best_p->nice);
         }
 
         swtch(&c->context, &best_p->context);

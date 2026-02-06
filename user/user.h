@@ -24,6 +24,7 @@ int sleep(int);
 int uptime(void);
 int set_sched_policy(int);
 int set_priority(int, int); 
+int enable_sched_output(int); 
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -38,4 +38,5 @@ entry("sleep");
 entry("uptime");
 entry("set_sched_policy");
 entry("set_priority");
+entry("enable_sched_output");
 

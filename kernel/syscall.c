@@ -103,6 +103,7 @@ extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_set_sched_policy(void);
 extern uint64 sys_set_priority(void);
+extern uint64 sys_enable_sched_output(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -130,6 +131,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_set_sched_policy] sys_set_sched_policy,
 [SYS_set_priority] sys_set_priority,
+[SYS_enable_sched_output] sys_enable_sched_output,
 };
 
 void
